@@ -3,7 +3,6 @@ const Folder = require('../models/Folder');
 const path = require('path');
 const fs = require('fs');
 
-const { BASE_STORAGE_PATH } = require('../config/storageConfig');
 
 // Función para crear una carpeta
 exports.createFolder = async (req, res) => {
@@ -17,7 +16,7 @@ exports.createFolder = async (req, res) => {
 
         // Determinar la ruta de la nueva carpeta
         let parentFolder = null;
-        let newFolderPath = path.join(BASE_STORAGE_PATH, req.user.username);
+        let newFolderPath = path.join(__dirname, '..', 'uploads', req.user.username);
 
         if (parentId) {
             parentFolder = await Folder.findById(parentId);

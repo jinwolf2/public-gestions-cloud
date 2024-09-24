@@ -1,7 +1,7 @@
 // controllers/userController.js
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
-const { BASE_STORAGE_PATH } = require('../config/storageConfig');
+
 
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
@@ -17,11 +17,9 @@ exports.registerUser = async (req, res) => {
         const user = await User.create({ username, password });
 
         // Crear carpeta de usuario
-        const userFolder = path.join(BASE_STORAGE_PATH, username);
-        console.log('BASE_STORAGE_PATH:', BASE_STORAGE_PATH);
+        const userFolder = path.join(__dirname, '..', 'uploads', username);
+        console.log('BASE_STORAGE_PATH:', userFolder);
         console.log('Intentando crear la carpeta del usuario en:', userFolder);
-
-        U
 
         try {
             fs.mkdirSync(userFolder, { recursive: true });

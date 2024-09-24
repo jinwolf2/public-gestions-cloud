@@ -16,7 +16,7 @@ exports.createFolder = async (req, res) => {
         }
 
         let parentFolder = null;
-        let folderPath = path.join(BASE_STORAGE_PATH, req.user.username);
+        let folderPath = path.join(__dirname, '..', 'uploads', req.user.username);
 
         if (parentId) {
             parentFolder = await Folder.findOne({ _id: parentId, owner: req.user._id });
@@ -55,7 +55,7 @@ exports.createFolder = async (req, res) => {
 exports.uploadFile = async (req, res) => {
     try {
         const file = req.file;
-        const { folderId } = req.body;
+        const { folderName } = req.body;
 
         if (!file) {
             return res.status(400).json({ message: 'No se ha subido ningún archivo' });
@@ -63,28 +63,47 @@ exports.uploadFile = async (req, res) => {
 
         // Obtener la carpeta donde se subirá el archivo
         let folder = null;
-        if (folderId) {
-            folder = await Folder.findOne({ _id: folderId, owner: req.user._id });
+        let folderPath = path.join(__dirname, '..', 'uploads', req.user.username);
+
+        if (folderName) {
+            folder = await Folder.findOne({ name: folderName, owner: req.user._id });
             if (!folder) {
-                // Eliminar el archivo subido
+                // Eliminar el archivo subido temporalmente
                 fs.unlinkSync(file.path);
                 return res.status(404).json({ message: 'Carpeta no encontrada' });
             }
+            folderPath = folder.path;
         }
 
         // Verificar el espacio disponible
         const user = req.user;
         if (user.usedSpace + file.size > user.diskSpace) {
-            // Eliminar el archivo subido
+            // Eliminar el archivo subido temporalmente
             fs.unlinkSync(file.path);
             return res.status(400).json({ message: 'Espacio de disco insuficiente' });
         }
 
+        // Preservar el nombre original del archivo y manejar duplicados
+        let filename = file.originalname;
+        let filePath = path.join(folderPath, filename);
+
+        let counter = 1;
+        while (fs.existsSync(filePath)) {
+            const extension = path.extname(filename);
+            const basename = path.basename(filename, extension);
+            filename = `${basename} (${counter})${extension}`;
+            filePath = path.join(folderPath, filename);
+            counter++;
+        }
+
+        // Mover el archivo al destino final
+        fs.renameSync(file.path, filePath);
+
         // Crear registro en la base de datos
         const newFile = await File.create({
-            filename: file.filename,
+            filename: filename,
             originalName: file.originalname,
-            path: file.path,
+            path: filePath,
             size: file.size,
             owner: user._id,
             folder: folder ? folder._id : null,
@@ -100,6 +119,7 @@ exports.uploadFile = async (req, res) => {
         res.status(500).json({ message: 'Error al subir el archivo' });
     }
 };
+
 
 // Función para descargar un archivo
 exports.downloadFile = async (req, res) => {
@@ -459,3 +479,86 @@ exports.moveFolder = async (req, res) => {
         res.status(500).json({ message: 'Error al mover la carpeta' });
     }
 };
+
+exports.uploadFolder = async (req, res) => {
+    try {
+        const files = req.files;
+
+        if (!files || files.length === 0) {
+            return res.status(400).json({ message: 'No se han subido archivos' });
+        }
+
+        const user = req.user;
+        let totalSize = 0;
+        const uploadedFiles = [];
+
+        for (const file of files) {
+            totalSize += file.size;
+
+            // Obtener la ruta relativa del archivo
+            const relativePath = path.relative(
+                path.join(__dirname, '..', 'uploads', user.username),
+                file.path
+            );
+
+            // Crear o buscar la carpeta en la base de datos
+            const folderPath = path.dirname(relativePath);
+            let folder = await createFoldersInDatabase(user._id, folderPath);
+
+            // Crear registro del archivo en la base de datos
+            const newFile = await File.create({
+                filename: file.filename,
+                originalName: file.originalname,
+                path: file.path,
+                size: file.size,
+                owner: user._id,
+                folder: folder ? folder._id : null,
+            });
+
+            uploadedFiles.push(newFile);
+        }
+
+        // Actualizar el espacio usado
+        user.usedSpace += totalSize;
+        await user.save();
+
+        res.status(201).json(uploadedFiles);
+    } catch (error) {
+        console.error('Error al subir la carpeta:', error);
+        res.status(500).json({ message: 'Error al subir la carpeta' });
+    }
+};
+
+// Función auxiliar para crear carpetas en la base de datos
+async function createFoldersInDatabase(userId, folderPath) {
+    if (!folderPath || folderPath === '.') {
+        return null;
+    }
+
+    const folders = folderPath.split(path.sep);
+    let parent = null;
+    let currentPath = path.join(__dirname, '..', 'uploads', req.user.username);
+
+    for (const folderName of folders) {
+        currentPath = path.join(currentPath, folderName);
+
+        let folder = await Folder.findOne({
+            owner: userId,
+            name: folderName,
+            parent: parent ? parent._id : null,
+        });
+
+        if (!folder) {
+            folder = await Folder.create({
+                name: folderName,
+                owner: userId,
+                parent: parent ? parent._id : null,
+                path: currentPath,
+            });
+        }
+
+        parent = folder;
+    }
+
+    return parent;
+}

@@ -3,7 +3,7 @@ const User = require('../models/User');
 const path = require('path');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
-const { BASE_STORAGE_PATH } = require('../config/storageConfig');
+
 
 // Función para generar tokens
 const generateToken = (id) => {
@@ -21,7 +21,7 @@ exports.createUser = async (req, res) => {
         const user = await User.create({ username, password, role, diskSpace });
 
         // Crear carpeta de usuario
-        const userFolder = path.join(BASE_STORAGE_PATH, username.path);
+        const userFolder = path.join(__dirname, '..', 'uploads', username);
         fs.mkdirSync(userFolder, { recursive: true });
 
         res.status(201).json({

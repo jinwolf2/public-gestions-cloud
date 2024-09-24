@@ -40,7 +40,7 @@ const seedAdmin = async () => {
         });
 
         // Crear carpeta de administrador
-        const adminFolder = path.join(BASE_STORAGE_PATH, admin.username);
+        const adminFolder = path.join(__dirname, '.', 'uploads', admin.username);
         fs.mkdirSync(adminFolder, { recursive: true });
 
         // Generar token para el nuevo administrador
